@@ -54,7 +54,7 @@
             </h3>
             <div class="flex flex-col gap-2">
                 <div class="flex gap-2">
-                    <input type="password" id="api-key" class="flex-grow border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Gemini API Keyを入力" value="AQ.Ab8RN6K11M2qP1yyQCRbq0uvcvZlTn0C8M6s-ywlKEEcVQ9ZLg">
+                    <input type="password" id="api-key" class="flex-grow border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Gemini API Keyを入力" value="AQ.Ab8RN6LohlADWBCB9NuONCkK2ttEq6rvFI0xK13nZc5KNvoZXw">
                     <button onclick="saveApiKey()" class="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-700">保存</button>
                 </div>
                 <p class="text-[10px] text-slate-500">※「AQ.」形式および「AIza...」形式の両方に対応しています。</p>
@@ -226,21 +226,36 @@
             if (!apiKey) { addChatMessage("ai", "APIキーを設定してください。"); return; }
             loadingIndicator.classList.remove('hidden');
             
-            try {
-                const genAI = new GoogleGenerativeAI(apiKey);
-                const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-                
-                const result = await model.generateContent(prompt);
-                const response = await result.response;
-                const text = response.text();
-                
-                addChatMessage("ai", text);
-            } catch (error) {
-                console.error(error);
-                addChatMessage("ai", `エラーが発生しました: ${error.message}\n\n※APIキーの権限設定や、Google AI Studioでの有効化状態を確認してください。`);
-            } finally {
-                loadingIndicator.classList.add('hidden');
+            // 試行するモデル名のリスト（404エラー対策）
+            // 実機検証により gemini-3.5-flash が動作することを確認済み
+            const modelsToTry = ["gemini-3.5-flash", "gemini-1.5-flash-latest", "gemini-1.5-flash", "gemini-pro"];
+            let lastError = null;
+
+            for (const modelName of modelsToTry) {
+                try {
+                    const genAI = new GoogleGenerativeAI(apiKey);
+                    const model = genAI.getGenerativeModel({ model: modelName });
+                    
+                    const result = await model.generateContent(prompt);
+                    const response = await result.response;
+                    const text = response.text();
+                    
+                    addChatMessage("ai", text);
+                    loadingIndicator.classList.add('hidden');
+                    return; // 成功したら終了
+                } catch (error) {
+                    console.warn(`Model ${modelName} failed:`, error);
+                    lastError = error;
+                    // 404以外（認証エラー等）の場合は即座に終了
+                    if (!error.message.includes("404") && !error.message.includes("not found")) {
+                        break;
+                    }
+                }
             }
+
+            // すべてのモデルで失敗した場合
+            addChatMessage("ai", `エラーが発生しました: ${lastError.message}\n\n【解決策】\n1. Google AI Studioで新しいAPIキー（AIza...で始まる形式）を作成してみてください。\n2. APIキーに「Generative Language API」の権限があるか確認してください。`);
+            loadingIndicator.classList.add('hidden');
         }
 
         window.onload = () => {
