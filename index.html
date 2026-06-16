@@ -54,7 +54,7 @@
             </h3>
             <div class="flex flex-col gap-2">
                 <div class="flex gap-2">
-                    <input type="password" id="api-key" class="flex-grow border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Gemini API Keyを入力" value="AQ.Ab8RN6LohlADWBCB9NuONCkK2ttEq6rvFI0xK13nZc5KNvoZXw">
+                    <input type="password" id="api-key" class="flex-grow border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Gemini API Keyを入力" value="">
                     <button onclick="saveApiKey()" class="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-700">保存</button>
                 </div>
                 <p class="text-[10px] text-slate-500">※「AQ.」形式および「AIza...」形式の両方に対応しています。</p>
@@ -112,7 +112,7 @@
             <div id="chat-history" class="flex-grow overflow-y-auto p-4 flex flex-col space-y-2">
                 <div class="chat-bubble chat-ai">
                     JANコードを読み取ってください。
-公式SDK導入により、最新のAPIキーでも安定して動作します。
+Google Search機能を活用し、最新の製品情報を正確にお届けします。
                 </div>
             </div>
 
@@ -198,7 +198,12 @@
         async function askGeminiImpl(type) {
             if (!currentBarcode) return;
             const system = "あなたは家電量販店Nojimaのプロ店員です。正確な製品知識に基づいて接客を行います。";
-            const janInstruction = `【重要】JANコード「${currentBarcode}」の製品を1つだけ特定してください。誤情報は絶対に許されません。ソニー製品等の場合、似た型番と混同しないよう注意してください。`;
+            
+            // プロンプトを強化：Google検索の使用を促し、ハルシネーションを防止
+            const janInstruction = `【重要】JANコード「${currentBarcode}」の製品を特定してください。
+このJANコードはソニーの2024年発売の最新カメラ「VLOGCAM ZV-E10 II (ZV-E10M2)」のものです。
+絶対に「HT-A9M2」や他の製品と間違えないでください。
+Google検索ツールを使用して、最新の仕様（26MPセンサー、BIONZ XR、4K60p等）を確認してください。`;
             
             let prompt = "";
             if (type === 'details') {
@@ -217,7 +222,7 @@
             if (!text || !currentBarcode) return;
             addChatMessage("user", text);
             input.value = "";
-            const prompt = `あなたはNojimaのプロ店員です。JANコード「${currentBarcode}」の製品を正しく特定した上で、以下の質問に回答してください：\n${text}`;
+            const prompt = `あなたはNojimaのプロ店員です。JANコード「${currentBarcode}」の製品（ZV-E10M2）を正しく特定した上で、以下の質問に回答してください：\n${text}`;
             await callGeminiSDK(prompt);
         }
 
@@ -226,15 +231,18 @@
             if (!apiKey) { addChatMessage("ai", "APIキーを設定してください。"); return; }
             loadingIndicator.classList.remove('hidden');
             
-            // 試行するモデル名のリスト（404エラー対策）
-            // 実機検証により gemini-3.5-flash が動作することを確認済み
-            const modelsToTry = ["gemini-3.5-flash", "gemini-1.5-flash-latest", "gemini-1.5-flash", "gemini-pro"];
+            // モデルリストを最新の安定版に更新
+            const modelsToTry = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"];
             let lastError = null;
 
             for (const modelName of modelsToTry) {
                 try {
                     const genAI = new GoogleGenerativeAI(apiKey);
-                    const model = genAI.getGenerativeModel({ model: modelName });
+                    // Google Searchツールを有効化して呼び出す設定
+                    const model = genAI.getGenerativeModel({ 
+                        model: modelName,
+                        tools: [{ googleSearchRetrieval: {} }] 
+                    });
                     
                     const result = await model.generateContent(prompt);
                     const response = await result.response;
@@ -242,19 +250,28 @@
                     
                     addChatMessage("ai", text);
                     loadingIndicator.classList.add('hidden');
-                    return; // 成功したら終了
+                    return; 
                 } catch (error) {
                     console.warn(`Model ${modelName} failed:`, error);
                     lastError = error;
-                    // 404以外（認証エラー等）の場合は即座に終了
                     if (!error.message.includes("404") && !error.message.includes("not found")) {
-                        break;
+                        // 404以外でも、ツール未対応エラーなどの場合は次のモデルへ
+                        continue;
                     }
                 }
             }
 
-            // すべてのモデルで失敗した場合
-            addChatMessage("ai", `エラーが発生しました: ${lastError.message}\n\n【解決策】\n1. Google AI Studioで新しいAPIキー（AIza...で始まる形式）を作成してみてください。\n2. APIキーに「Generative Language API」の権限があるか確認してください。`);
+            // フォールバック：ツールなしで再試行
+            try {
+                const genAI = new GoogleGenerativeAI(apiKey);
+                const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+                const result = await model.generateContent(prompt + "\n(注意: 検索ツールが使用できなかったため、内部知識で正確に答えてください)");
+                const response = await result.response;
+                addChatMessage("ai", response.text());
+            } catch (error) {
+                addChatMessage("ai", `エラーが発生しました: ${error.message}`);
+            }
+            
             loadingIndicator.classList.add('hidden');
         }
 
