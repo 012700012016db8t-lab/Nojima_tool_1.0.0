@@ -263,11 +263,14 @@
             if (!currentBarcode) return;
             
             let prompt = "";
+            const systemContext = "あなたは家電量販店Nojima（ノジマ）のプロ販売員です。正確な製品知識に基づき、お客様に最適な提案を行います。";
+            const accuracyNotice = "【重要】JANコードから製品を特定する際は、誤情報を防ぐため慎重に判断してください。確信が持てない場合はその旨を伝えてください。";
+
             if (type === 'details') {
-                prompt = `バーコード番号「${currentBarcode}」の商品の詳細情報を教えてください。メーカー、型番、製品カテゴリ、発売時期などを含めてください。Nojimaの販売員としてお客様に説明しやすいようにまとめてください。`;
+                prompt = `${systemContext}\nJANコード「${currentBarcode}」の製品情報を特定してください。\n\n${accuracyNotice}\n\n以下の項目を詳しく教えてください：\n1. 正確な製品名とメーカー名\n2. 製品カテゴリと主なスペック\n3. 発売時期\n4. ノジマの店員としてお客様に説明する際のポイント`;
                 addChatMessage("user", "製品詳細を教えて");
             } else if (type === 'features') {
-                prompt = `バーコード番号「${currentBarcode}」の商品の主な特徴と、競合製品と比較した際の強みを3点ほど教えてください。Nojimaの販売員が接客で使えるトークスクリプト形式でお願いします。`;
+                prompt = `${systemContext}\nJANコード「${currentBarcode}」の製品について、競合他社製品と比較した際の強みや独自の機能を3点ほど挙げてください。\n\n${accuracyNotice}\n\nノジマの接客現場でそのまま使える『おすすめトーク』形式で回答してください。`;
                 addChatMessage("user", "主な特徴を教えて");
             }
 
@@ -285,7 +288,8 @@
             addChatMessage("user", text);
             input.value = "";
 
-            const prompt = `バーコード番号「${currentBarcode}」の商品に関して質問です：${text}\n\nNojimaの販売員として、丁寧かつ専門的に回答してください。`;
+            const systemContext = "あなたは家電量販店Nojimaのプロ販売員です。";
+            const prompt = `${systemContext}\nJANコード「${currentBarcode}」の製品に関する質問です：\n${text}\n\n専門用語を分かりやすく解説しつつ、ノジマらしい丁寧な接客口調で回答してください。`;
             await callGeminiAPI(prompt);
         }
 
